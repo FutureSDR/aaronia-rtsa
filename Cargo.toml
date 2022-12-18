@@ -1,0 +1,13 @@
+[package]
+name = "aaronia-rtsa"
+version = "0.0.1"
+edition = "2021"
+
+[workspace]
+members = [
+    ".",
+    "aaronia-rtsa-sys",
+]
+
+[dependencies]
+aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys" }
