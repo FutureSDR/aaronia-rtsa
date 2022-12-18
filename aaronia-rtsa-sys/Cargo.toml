@@ -4,6 +4,8 @@ version = "0.0.1"
 edition = "2021"
 build = "build.rs"
 links = "AaroniaRTSAAPI"
+license = "Apache-2.0"
+description = "Bindgen wrappers for Aaronia RTSA SDK"
 
 [dependencies]
 libc = "0.2"
