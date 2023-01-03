@@ -20,17 +20,18 @@ fn search() -> Option<PathBuf> {
 }
 
 fn main() {
-    let dir = search().unwrap();
+    let dir = search().expect("sdk not found, set RTSA_DIR environment variable");
+    let dir = dir.to_str().expect("sdk path not valid utf-8");
 
-    println!("cargo:rustc-link-search={}", dir.to_str().unwrap());
+    println!("cargo:rustc-link-search={dir}");
     println!("cargo:rustc-link-lib={LIB}");
-    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-env-changed=RTSA_DIR");
 
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
         .clang_arg("-std=c++14")
-        .clang_arg(format!("-I{}", dir.to_str().unwrap()))
+        .clang_arg(format!("-I{dir}"))
         .header("wrapper.h")
         .allowlist_function("AARTSAAPI.*")
         .allowlist_var("AARTSAAPI.*")

@@ -1,9 +1,9 @@
 [package]
 name = "aaronia-rtsa"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "Apache-2.0"
-description = "FFI Interface for Aaronia RTSA SDK"
+description = "Driver for Aaronia RTSA"
 
 [workspace]
 members = [
@@ -12,4 +12,4 @@ members = [
 ]
 
 [dependencies]
-aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.1" }
+aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.2" }
