@@ -113,27 +113,17 @@ impl ApiHandle {
         Ok(devices)
     }
 
-    pub fn open_device(&mut self) -> std::result::Result<Device, Error> {
+    pub fn get_device(&mut self) -> std::result::Result<Device, Error> {
         let devs = self.devices()?;
         if let Some(d) = devs.get(0) {
-            self.open_this_device(&d)
+            self.get_this_device(&d)
         } else {
             Err(Error::Empty)
         }
     }
 
-    pub fn open_this_device(&mut self, info: &DeviceInfo) -> std::result::Result<Device, Error> {
-        let mut dev = Device::new();
-        let device_type = WideString::from("spectranv6/raw");
-        unsafe {
-            res(sys::AARTSAAPI_OpenDevice(
-                &mut self.inner,
-                &mut dev.inner,
-                device_type.as_ptr(),
-                info.inner.serialNumber.as_ptr(),
-            ))?;
-        }
-        Ok(dev)
+    pub fn get_this_device(&mut self, info: &DeviceInfo) -> std::result::Result<Device, Error> {
+        Ok(Device::new(info)?)
     }
 }
 
@@ -160,21 +150,94 @@ pub struct ConfigInfo {
     inner: sys::AARTSAAPI_ConfigInfo,
 }
 
+#[derive(Debug, PartialEq)]
+enum DeviceStatus {
+    Uninit,
+    Opened,
+    Connected,
+    Started,
+}
+
 pub struct Device {
     inner: sys::AARTSAAPI_Device,
+    api: ApiHandle,
+    status: DeviceStatus,
+    serial: WideString,
 }
 
 impl Device {
-    fn new() -> Self {
-        Device {
+    fn new(info: &DeviceInfo) -> std::result::Result<Self, Error> {
+        Ok(Device {
             inner: sys::AARTSAAPI_Device {
                 d: std::ptr::null_mut(),
             },
+            api: ApiHandle::new()?,
+            status: DeviceStatus::Uninit,
+            serial: WideString::from_vec(info.inner.serialNumber),
+        })
+    }
+
+    fn open(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Uninit);
+        let device_type = WideString::from("spectranv6/raw");
+
+        unsafe {
+            res(sys::AARTSAAPI_OpenDevice(
+                &mut self.api.inner,
+                &mut self.inner,
+                device_type.as_ptr(),
+                self.serial.as_ptr(),
+            ))?;
         }
+
+        self.status = DeviceStatus::Opened;
+
+        Ok(())
+    }
+
+    fn close(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Opened);
+        unsafe { res(sys::AARTSAAPI_CloseDevice(&mut self.api.inner, &mut self.inner))? }
+        self.status = DeviceStatus::Uninit;
+        Ok(())
+    }
+
+    fn connect(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Opened);
+        unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
+        self.status = DeviceStatus::Connected;
+        Ok(())
+    }
+
+    fn disconnect(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Connected);
+        unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
+        self.status = DeviceStatus::Opened;
+        Ok(())
+    }
+
+    fn start(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Connected);
+        unsafe { res(sys::AARTSAAPI_StartDevice(&mut self.inner))? }
+        self.status = DeviceStatus::Started;
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result {
+        assert_eq!(self.status, DeviceStatus::Started);
+        unsafe { res(sys::AARTSAAPI_StopDevice(&mut self.inner))? }
+        self.status = DeviceStatus::Connected;
+        Ok(())
     }
 }
 
-#[derive(Debug)]
+impl Drop for Device {
+    fn drop(&mut self) {
+        if self.status != DeviceStatus::Uninit {}
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DeviceInfo {
     inner: sys::AARTSAAPI_DeviceInfo,
 }
