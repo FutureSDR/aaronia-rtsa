@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
 use std::sync::Mutex;
-use widestring::WideString;
+use widestring::WideCString;
 
 pub fn version() -> String {
     let n = unsafe { sys::AARTSAAPI_Version() };
@@ -63,13 +63,13 @@ impl ApiHandle {
             match res(sys::AARTSAAPI_Open(&mut h)) {
                 Ok(()) => {
                     api.as_mut().unwrap().add_handle();
-                    return Ok(ApiHandle { inner: h });
+                    Ok(ApiHandle { inner: h })
                 }
                 Err(e) => {
                     if api.as_mut().unwrap().handles() == 0 {
                         *api = None;
                     }
-                    return Err(e);
+                    Err(e)
                 }
             }
         }
@@ -92,7 +92,7 @@ impl ApiHandle {
 
     pub fn devices(&mut self) -> std::result::Result<Vec<DeviceInfo>, Error> {
         let mut devices = Vec::new();
-        let device_type = WideString::from("spectranv6");
+        let device_type = WideCString::from_str_truncate("spectranv6");
 
         for i in 0.. {
             let mut di = DeviceInfo::new();
@@ -116,14 +116,14 @@ impl ApiHandle {
     pub fn get_device(&mut self) -> std::result::Result<Device, Error> {
         let devs = self.devices()?;
         if let Some(d) = devs.get(0) {
-            self.get_this_device(&d)
+            self.get_this_device(d)
         } else {
             Err(Error::Empty)
         }
     }
 
     pub fn get_this_device(&mut self, info: &DeviceInfo) -> std::result::Result<Device, Error> {
-        Ok(Device::new(info)?)
+        Device::new(info)
     }
 }
 
@@ -142,7 +142,7 @@ impl Drop for ApiHandle {
     }
 }
 
-pub struct Config {
+struct Config {
     inner: sys::AARTSAAPI_Config,
 }
 
@@ -156,7 +156,7 @@ impl Config {
     }
 }
 
-pub struct ConfigInfo {
+struct ConfigInfo {
     inner: sys::AARTSAAPI_ConfigInfo,
 }
 
@@ -200,7 +200,7 @@ pub struct Device {
     inner: sys::AARTSAAPI_Device,
     api: ApiHandle,
     status: DeviceStatus,
-    serial: WideString,
+    serial: WideCString,
 }
 
 impl Device {
@@ -211,13 +211,13 @@ impl Device {
             },
             api: ApiHandle::new()?,
             status: DeviceStatus::Uninit,
-            serial: WideString::from_vec(info.inner.serialNumber),
+            serial: WideCString::from_vec_truncate(info.inner.serialNumber),
         })
     }
 
-    fn open(&mut self) -> Result {
+    pub fn open(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Uninit);
-        let device_type = WideString::from("spectranv6/raw");
+        let device_type = WideCString::from_str_truncate("spectranv6/raw");
 
         unsafe {
             res(sys::AARTSAAPI_OpenDevice(
@@ -233,7 +233,7 @@ impl Device {
         Ok(())
     }
 
-    fn close(&mut self) -> Result {
+    pub fn close(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Opened);
         unsafe {
             res(sys::AARTSAAPI_CloseDevice(
@@ -245,35 +245,35 @@ impl Device {
         Ok(())
     }
 
-    fn connect(&mut self) -> Result {
+    pub fn connect(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Opened);
         unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
         self.status = DeviceStatus::Connected;
         Ok(())
     }
 
-    fn disconnect(&mut self) -> Result {
+    pub fn disconnect(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Connected);
         unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
         self.status = DeviceStatus::Opened;
         Ok(())
     }
 
-    fn start(&mut self) -> Result {
+    pub fn start(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Connected);
         unsafe { res(sys::AARTSAAPI_StartDevice(&mut self.inner))? }
         self.status = DeviceStatus::Started;
         Ok(())
     }
 
-    fn stop(&mut self) -> Result {
+    pub fn stop(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Started);
         unsafe { res(sys::AARTSAAPI_StopDevice(&mut self.inner))? }
         self.status = DeviceStatus::Connected;
         Ok(())
     }
 
-    fn state(&mut self) -> std::result::Result<DeviceState, Error> {
+    pub fn state(&mut self) -> std::result::Result<DeviceState, Error> {
         let res = unsafe { res(sys::AARTSAAPI_GetDeviceState(&mut self.inner)) };
         match res {
             Ok(()) => Err(Error::Error),
@@ -281,18 +281,57 @@ impl Device {
         }
     }
 
-    fn config<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
-        let path = WideString::from_str(path.as_ref());
-        let value = WideString::from_str(value.as_ref());
+    pub fn config<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
+        let path = WideCString::from_str_truncate(path.as_ref());
+        let value = WideCString::from_str_truncate(value.as_ref());
 
         let mut root = Config::new();
         let mut node = Config::new();
 
         unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
-        unsafe { res(sys::AARTSAAPI_ConfigFind(&mut self.inner, &mut root.inner, &mut node.inner, path.as_ptr()))? };
-        unsafe { res(sys::AARTSAAPI_ConfigSetString(&mut self.inner, &mut node.inner, value.as_ptr()))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigFind(
+                &mut self.inner,
+                &mut root.inner,
+                &mut node.inner,
+                path.as_ptr(),
+            ))?
+        };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigSetString(
+                &mut self.inner,
+                &mut node.inner,
+                value.as_ptr(),
+            ))?
+        };
 
         Ok(())
+    }
+
+    pub fn packet(&mut self) -> std::result::Result<Packet, Error> {
+        let mut packet = Packet::new();
+
+        loop {
+            let ret = unsafe {
+                res(sys::AARTSAAPI_GetPacket(
+                    &mut self.inner,
+                    0,
+                    0,
+                    &mut packet.inner,
+                ))
+            };
+            match ret {
+                Ok(_) => return Ok(packet),
+                Err(Error::Empty) => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    pub fn consume(&mut self) -> Result {
+        unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, 0, 1)) }
     }
 }
 
@@ -316,7 +355,7 @@ impl Drop for Device {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DeviceInfo {
     inner: sys::AARTSAAPI_DeviceInfo,
 }
@@ -336,8 +375,50 @@ impl DeviceInfo {
     }
 }
 
+impl std::fmt::Debug for DeviceInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceInfo")
+            .field(
+                "serial",
+                &WideCString::from_vec_truncate(self.inner.serialNumber).to_string_lossy(),
+            )
+            .field("ready", &self.inner.ready)
+            .field("boost", &self.inner.boost)
+            .field("superspeed", &self.inner.superspeed)
+            .field("active", &self.inner.active)
+            .finish()
+    }
+}
+
 pub struct Packet {
     inner: sys::AARTSAAPI_Packet,
+}
+
+impl Packet {
+    fn new() -> Self {
+        Self {
+            inner: sys::AARTSAAPI_Packet {
+                cbsize: std::mem::size_of::<sys::AARTSAAPI_Packet>() as _,
+                streamID: 0,
+                flags: 0,
+                startTime: 0.0,
+                endTime: 0.0,
+                startFrequency: 0.0,
+                stepFrequency: 0.0,
+                spanFrequency: 0.0,
+                rbwFrequency: 0.0,
+                num: 0,
+                total: 0,
+                size: 0,
+                stride: 0,
+                fp32: std::ptr::null_mut(),
+            },
+        }
+    }
+
+    pub fn samples(&self) -> &'static [num_complex::Complex32] {
+        unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.num as _) }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -517,20 +598,3 @@ fn res(r: sys::AARTSAAPI_Result) -> Result {
         _ => Err(Error::Undocumented),
     }
 }
-
-//// Open a device for exclusive use.  This allocates the required data structures
-//// and prepares the configuration settings, but will not access the hardware.
-////
-//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_OpenDevice(AARTSAAPI_Handle * handle, AARTSAAPI_Device * dhandle, const wchar_t * type, const wchar_t * serialNumber);
-//
-//// Close a device
-////
-//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_CloseDevice(AARTSAAPI_Handle * handle, AARTSAAPI_Device * dhandle);
-//
-//// Connect to the pysical device
-////
-//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_ConnectDevice(AARTSAAPI_Device * dhandle);
-//
-//// Disconnect from the physical device
-////
-//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_DisconnectDevice(AARTSAAPI_Device * dhandle);
