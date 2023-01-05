@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
-use std::mem::MaybeUninit;
 
 pub struct Config {
     inner: sys::AARTSAAPI_Config,
@@ -21,28 +20,16 @@ pub struct DeviceInfo {
 
 impl DeviceInfo {
     fn new() -> Self {
-        unsafe {
-        let d = MaybeUninit::<sys::AARTSAAPI_DeviceInfo>::zeroed().assume_init();
-            Self {
-                inner: d,
-            }
+        Self {
+            inner: sys::AARTSAAPI_DeviceInfo {
+                cbsize: std::mem::size_of::<sys::AARTSAAPI_DeviceInfo>() as _,
+                serialNumber: [0; 120],
+                ready: false,
+                boost: false,
+                superspeed: false,
+                active: false,
+            },
         }
-        // Self {
-        //     inner: sys::AARTSAAPI_DeviceInfo {
-        //         cbsize: 0,
-        //         serialNumber: [0; 120],
-        //         ready: false,
-        //         boost: false,
-        //         superspeed: false,
-        //         active: false,
-        //     },
-        // }
-    }
-}
-
-impl Drop for DeviceInfo {
-    fn drop(&mut self) {
-        println!("dropping dev info");
     }
 }
 
@@ -263,7 +250,7 @@ pub fn handle() -> std::result::Result<Handle, Error> {
 
 pub fn rescan_devices(h: &mut Handle) -> Result {
     loop {
-        let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut h.inner, 2000)) };
+        let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut h.inner, 10000)) };
         match r {
             Ok(()) => break Ok(()),
             Err(Error::Retry) => continue,
