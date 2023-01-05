@@ -146,6 +146,16 @@ pub struct Config {
     inner: sys::AARTSAAPI_Config,
 }
 
+impl Config {
+    fn new() -> Self {
+        Self {
+            inner: sys::AARTSAAPI_Config {
+                d: std::ptr::null_mut(),
+            },
+        }
+    }
+}
+
 pub struct ConfigInfo {
     inner: sys::AARTSAAPI_ConfigInfo,
 }
@@ -156,6 +166,34 @@ enum DeviceStatus {
     Opened,
     Connected,
     Started,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DeviceState {
+    Idle,
+    Connecting,
+    Connected,
+    Starting,
+    Running,
+    Stopping,
+    Disconnecting,
+}
+
+impl TryInto<DeviceState> for Error {
+    type Error = Error;
+
+    fn try_into(self) -> std::result::Result<DeviceState, <Error as TryInto<DeviceState>>::Error> {
+        match self {
+            Error::Idle => Ok(DeviceState::Idle),
+            Error::Connecting => Ok(DeviceState::Connecting),
+            Error::Connected => Ok(DeviceState::Connected),
+            Error::Starting => Ok(DeviceState::Starting),
+            Error::Running => Ok(DeviceState::Running),
+            Error::Stopping => Ok(DeviceState::Stopping),
+            Error::Disconnecting => Ok(DeviceState::Disconnecting),
+            x => Err(x),
+        }
+    }
 }
 
 pub struct Device {
@@ -197,7 +235,12 @@ impl Device {
 
     fn close(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Opened);
-        unsafe { res(sys::AARTSAAPI_CloseDevice(&mut self.api.inner, &mut self.inner))? }
+        unsafe {
+            res(sys::AARTSAAPI_CloseDevice(
+                &mut self.api.inner,
+                &mut self.inner,
+            ))?
+        }
         self.status = DeviceStatus::Uninit;
         Ok(())
     }
@@ -229,11 +272,47 @@ impl Device {
         self.status = DeviceStatus::Connected;
         Ok(())
     }
+
+    fn state(&mut self) -> std::result::Result<DeviceState, Error> {
+        let res = unsafe { res(sys::AARTSAAPI_GetDeviceState(&mut self.inner)) };
+        match res {
+            Ok(()) => Err(Error::Error),
+            Err(e) => e.try_into(),
+        }
+    }
+
+    fn config<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
+        let path = WideString::from_str(path.as_ref());
+        let value = WideString::from_str(value.as_ref());
+
+        let mut root = Config::new();
+        let mut node = Config::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
+        unsafe { res(sys::AARTSAAPI_ConfigFind(&mut self.inner, &mut root.inner, &mut node.inner, path.as_ptr()))? };
+        unsafe { res(sys::AARTSAAPI_ConfigSetString(&mut self.inner, &mut node.inner, value.as_ptr()))? };
+
+        Ok(())
+    }
 }
 
 impl Drop for Device {
     fn drop(&mut self) {
-        if self.status != DeviceStatus::Uninit {}
+        match self.status {
+            DeviceStatus::Uninit => {}
+            DeviceStatus::Opened => {
+                let _ = self.close();
+            }
+            DeviceStatus::Connected => {
+                let _ = self.disconnect().and_then(|_| self.close());
+            }
+            DeviceStatus::Started => {
+                let _ = self
+                    .stop()
+                    .and_then(|_| self.disconnect())
+                    .and_then(|_| self.close());
+            }
+        }
     }
 }
 
