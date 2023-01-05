@@ -1,6 +1,7 @@
 use aaronia_rtsa::version;
 use aaronia_rtsa::ApiHandle;
 use aaronia_rtsa::Device;
+use num_complex::Complex32;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RTSA library version: {}", version());
@@ -29,16 +30,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn rx(dev: &mut Device) -> Result<(), aaronia_rtsa::Error> {
-    let p = dev.packet()?;
-    let s = p.samples().clone();
-    dev.consume()?;
+    const N: usize = 8192;
+    let mut samples = [Complex32::new(0.0, 0.0); N];
+    let mut i = 0;
+    while i < N {
+        let p = dev.packet()?;
+        let cur = p.samples();
+        let n = std::cmp::min(N - i, cur.len());
+        samples[i..i + n].copy_from_slice(&cur[0..n]);
+        i += n;
+        dev.consume()?;
+    }
 
-    plot(s);
-
+    plot(&mut samples);
     Ok(())
 }
 
-fn plot(s: &[num_complex::Complex32]) {
+fn plot(s: &mut [num_complex::Complex32]) {
     use gnuplot::*;
     let re = s.iter().map(|s| s.re);
     let im = s.iter().map(|s| s.im);
@@ -59,4 +67,22 @@ fn plot(s: &[num_complex::Complex32]) {
         );
 
     fg.show().unwrap();
+
+    let mut planner = rustfft::FftPlanner::new();
+    planner.plan_fft_forward(s.len()).process(s);
+
+    let abs = s.iter().map(|s| s.norm_sqr().log10());
+
+    let mut fg = Figure::new();
+
+    fg.axes2d()
+        .set_title("Spectrum", &[])
+        .lines(
+            0..s.len(),
+            abs,
+            &[LineWidth(3.0), Color("blue"), LineStyle(DotDash)],
+        );
+
+    fg.show().unwrap();
+
 }

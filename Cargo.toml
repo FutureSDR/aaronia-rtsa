@@ -13,7 +13,8 @@ members = [
 
 [dependencies]
 aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.2" }
+gnuplot = "0.0.37"
 num-complex = "0.4.2"
+rustfft = "6.1.0"
 thiserror = "1.0.38"
 widestring = "1.0.2"
-gnuplot = "0.0.37"
