@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
+use std::mem::MaybeUninit;
 
 pub struct Config {
     inner: sys::AARTSAAPI_Config,
@@ -13,10 +14,39 @@ pub struct Device {
     inner: sys::AARTSAAPI_Device,
 }
 
+#[derive(Debug)]
 pub struct DeviceInfo {
     inner: sys::AARTSAAPI_DeviceInfo,
 }
 
+impl DeviceInfo {
+    fn new() -> Self {
+        unsafe {
+        let d = MaybeUninit::<sys::AARTSAAPI_DeviceInfo>::zeroed().assume_init();
+            Self {
+                inner: d,
+            }
+        }
+        // Self {
+        //     inner: sys::AARTSAAPI_DeviceInfo {
+        //         cbsize: 0,
+        //         serialNumber: [0; 120],
+        //         ready: false,
+        //         boost: false,
+        //         superspeed: false,
+        //         active: false,
+        //     },
+        // }
+    }
+}
+
+impl Drop for DeviceInfo {
+    fn drop(&mut self) {
+        println!("dropping dev info");
+    }
+}
+
+#[derive(Debug)]
 pub struct Handle {
     inner: sys::AARTSAAPI_Handle,
 }
@@ -230,3 +260,63 @@ pub fn handle() -> std::result::Result<Handle, Error> {
     };
     unsafe { res(sys::AARTSAAPI_Open(&mut h)).map(|_| Handle { inner: h }) }
 }
+
+pub fn rescan_devices(h: &mut Handle) -> Result {
+    loop {
+        let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut h.inner, 2000)) };
+        match r {
+            Ok(()) => break Ok(()),
+            Err(Error::Retry) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+pub fn reset_devices(h: &mut Handle) -> Result {
+    unsafe { res(sys::AARTSAAPI_ResetDevices(&mut h.inner)) }
+}
+
+pub fn devices(h: &mut Handle) -> std::result::Result<Vec<DeviceInfo>, Error> {
+    let mut devices = Vec::new();
+    let device_type = wchar::wchz!("spectranv6");
+
+    for i in 0.. {
+        let mut di = DeviceInfo::new();
+        match unsafe {
+            res(sys::AARTSAAPI_EnumDevice(
+                &mut h.inner,
+                device_type.as_ptr() as _,
+                i,
+                &mut di.inner,
+            ))
+        } {
+            Ok(()) => devices.push(di),
+            Err(Error::Empty) => break,
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(devices)
+}
+
+//// Enumerate the devices for a given type.  The list starts with index 0 and will
+//// return AARTSAAPI_EMPTY when the end of the list is reached.
+////
+//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_EnumDevice(AARTSAAPI_Handle * handle, const wchar_t * type, int32_t index, AARTSAAPI_DeviceInfo * dinfo);
+//
+//// Open a device for exclusive use.  This allocates the required data structures
+//// and prepares the configuration settings, but will not access the hardware.
+////
+//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_OpenDevice(AARTSAAPI_Handle * handle, AARTSAAPI_Device * dhandle, const wchar_t * type, const wchar_t * serialNumber);
+//
+//// Close a device
+////
+//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_CloseDevice(AARTSAAPI_Handle * handle, AARTSAAPI_Device * dhandle);
+//
+//// Connect to the pysical device
+////
+//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_ConnectDevice(AARTSAAPI_Device * dhandle);
+//
+//// Disconnect from the physical device
+////
+//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_DisconnectDevice(AARTSAAPI_Device * dhandle);

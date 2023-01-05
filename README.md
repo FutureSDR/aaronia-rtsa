@@ -6,3 +6,9 @@ Usage:
 - Add the directory of the RTSA Suite Pro to your `LD_LIBRARY_PATH`
 
 The latter is necessary, because Rust does not allow [setting an rpath that is picked up by transitive dependencies](https://github.com/rust-lang/cargo/issues/5077).
+
+
+## Notes
+- typo: AARTSAAPI_ERROR_INVALID_PARAMETR
+- device type: why no enum, why wchar :-(
+- const handle
