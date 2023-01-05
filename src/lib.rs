@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
 use std::sync::Mutex;
+use widestring::WideString;
 
 pub fn version() -> String {
     let n = unsafe { sys::AARTSAAPI_Version() };
@@ -91,14 +92,14 @@ impl ApiHandle {
 
     pub fn devices(&mut self) -> std::result::Result<Vec<DeviceInfo>, Error> {
         let mut devices = Vec::new();
-        let device_type = wchar::wchz!("spectranv6");
+        let device_type = WideString::from("spectranv6");
 
         for i in 0.. {
             let mut di = DeviceInfo::new();
             match unsafe {
                 res(sys::AARTSAAPI_EnumDevice(
                     &mut self.inner,
-                    device_type.as_ptr() as _,
+                    device_type.as_ptr(),
                     i,
                     &mut di.inner,
                 ))
@@ -110,6 +111,29 @@ impl ApiHandle {
         }
 
         Ok(devices)
+    }
+
+    pub fn open_device(&mut self) -> std::result::Result<Device, Error> {
+        let devs = self.devices()?;
+        if let Some(d) = devs.get(0) {
+            self.open_this_device(&d)
+        } else {
+            Err(Error::Empty)
+        }
+    }
+
+    pub fn open_this_device(&mut self, info: &DeviceInfo) -> std::result::Result<Device, Error> {
+        let mut dev = Device::new();
+        let device_type = WideString::from("spectranv6/raw");
+        unsafe {
+            res(sys::AARTSAAPI_OpenDevice(
+                &mut self.inner,
+                &mut dev.inner,
+                device_type.as_ptr(),
+                info.inner.serialNumber.as_ptr(),
+            ))?;
+        }
+        Ok(dev)
     }
 }
 
@@ -138,6 +162,16 @@ pub struct ConfigInfo {
 
 pub struct Device {
     inner: sys::AARTSAAPI_Device,
+}
+
+impl Device {
+    fn new() -> Self {
+        Device {
+            inner: sys::AARTSAAPI_Device {
+                d: std::ptr::null_mut(),
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
