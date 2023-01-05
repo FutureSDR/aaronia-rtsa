@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
+use once_cell::sync::OnceCell;
 
 pub struct Config {
     inner: sys::AARTSAAPI_Config,
@@ -33,12 +34,84 @@ impl DeviceInfo {
     }
 }
 
+static API: OnceCell<Api> = OnceCell::new();
+
+struct Api;
+
+impl Api {
+    fn new(mem: Memory) -> Self {
+        unsafe { res(sys::AARTSAAPI_Init(mem.into())).unwrap() }
+        Self
+    }
+}
+
+impl Drop for Api {
+    fn drop(&mut self) {
+        unsafe { res(sys::AARTSAAPI_Shutdown()).unwrap() }
+    }
+}
+
 #[derive(Debug)]
-pub struct Handle {
+pub struct ApiHandle {
     inner: sys::AARTSAAPI_Handle,
 }
 
-impl Drop for Handle {
+impl ApiHandle {
+    pub fn new() -> std::result::Result<Self, Error> {
+        Self::with_mem(Memory::Medium)
+    }
+
+    pub fn with_mem(mem: Memory) -> std::result::Result<Self, Error> {
+        let _ = API.get_or_init(|| {
+            Api::new(mem)
+        });
+
+        let mut h = sys::AARTSAAPI_Handle {
+            d: std::ptr::null_mut(),
+        };
+        unsafe { res(sys::AARTSAAPI_Open(&mut h)).map(|_| ApiHandle { inner: h }) }
+    }
+
+    pub fn rescan_devices(&mut self) -> Result {
+        loop {
+            let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut self.inner, 10000)) };
+            match r {
+                Ok(()) => break Ok(()),
+                Err(Error::Retry) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    pub fn reset_devices(&mut self) -> Result {
+        unsafe { res(sys::AARTSAAPI_ResetDevices(&mut self.inner)) }
+    }
+
+    pub fn devices(&mut self) -> std::result::Result<Vec<DeviceInfo>, Error> {
+        let mut devices = Vec::new();
+        let device_type = wchar::wchz!("spectranv6");
+
+        for i in 0.. {
+            let mut di = DeviceInfo::new();
+            match unsafe {
+                res(sys::AARTSAAPI_EnumDevice(
+                    &mut self.inner,
+                    device_type.as_ptr() as _,
+                    i,
+                    &mut di.inner,
+                ))
+            } {
+                    Ok(()) => devices.push(di),
+                    Err(Error::Empty) => break,
+                    Err(e) => return Err(e),
+                }
+        }
+
+        Ok(devices)
+    }
+}
+
+impl Drop for ApiHandle {
     fn drop(&mut self) {
         unsafe {
             res(sys::AARTSAAPI_Close(&mut self.inner)).expect("error dropping API handle");
@@ -233,64 +306,6 @@ pub fn version() -> String {
     format!("{}.{}", n >> 16, n & 0xffff)
 }
 
-pub fn init(memory: Memory) -> Result {
-    unsafe { res(sys::AARTSAAPI_Init(memory.into())) }
-}
-
-pub fn shutdown() -> Result {
-    unsafe { res(sys::AARTSAAPI_Shutdown()) }
-}
-
-pub fn handle() -> std::result::Result<Handle, Error> {
-    let mut h = sys::AARTSAAPI_Handle {
-        d: std::ptr::null_mut(),
-    };
-    unsafe { res(sys::AARTSAAPI_Open(&mut h)).map(|_| Handle { inner: h }) }
-}
-
-pub fn rescan_devices(h: &mut Handle) -> Result {
-    loop {
-        let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut h.inner, 10000)) };
-        match r {
-            Ok(()) => break Ok(()),
-            Err(Error::Retry) => continue,
-            Err(e) => return Err(e),
-        }
-    }
-}
-
-pub fn reset_devices(h: &mut Handle) -> Result {
-    unsafe { res(sys::AARTSAAPI_ResetDevices(&mut h.inner)) }
-}
-
-pub fn devices(h: &mut Handle) -> std::result::Result<Vec<DeviceInfo>, Error> {
-    let mut devices = Vec::new();
-    let device_type = wchar::wchz!("spectranv6");
-
-    for i in 0.. {
-        let mut di = DeviceInfo::new();
-        match unsafe {
-            res(sys::AARTSAAPI_EnumDevice(
-                &mut h.inner,
-                device_type.as_ptr() as _,
-                i,
-                &mut di.inner,
-            ))
-        } {
-            Ok(()) => devices.push(di),
-            Err(Error::Empty) => break,
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(devices)
-}
-
-//// Enumerate the devices for a given type.  The list starts with index 0 and will
-//// return AARTSAAPI_EMPTY when the end of the list is reached.
-////
-//AARONIARTSAAPI_EXPORT AARTSAAPI_Result AARTSAAPI_EnumDevice(AARTSAAPI_Handle * handle, const wchar_t * type, int32_t index, AARTSAAPI_DeviceInfo * dinfo);
-//
 //// Open a device for exclusive use.  This allocates the required data structures
 //// and prepares the configuration settings, but will not access the hardware.
 ////
