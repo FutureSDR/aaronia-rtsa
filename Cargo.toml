@@ -13,6 +13,5 @@ members = [
 
 [dependencies]
 aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.2" }
-once_cell = "1.17.0"
 thiserror = "1.0.38"
 wchar = "0.10"

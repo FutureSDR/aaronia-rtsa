@@ -12,3 +12,4 @@ The latter is necessary, because Rust does not allow [setting an rpath that is p
 - typo: AARTSAAPI_ERROR_INVALID_PARAMETR
 - device type: why no enum, why wchar :-(
 - const handle
+- how are mutliple instances of api wrapper avoided?

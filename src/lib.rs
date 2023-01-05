@@ -1,47 +1,34 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
-use once_cell::sync::OnceCell;
+use std::sync::Mutex;
 
-pub struct Config {
-    inner: sys::AARTSAAPI_Config,
+pub fn version() -> String {
+    let n = unsafe { sys::AARTSAAPI_Version() };
+    format!("{}.{}", n >> 16, n & 0xffff)
 }
 
-pub struct ConfigInfo {
-    inner: sys::AARTSAAPI_ConfigInfo,
+static API: Mutex<Option<Api>> = Mutex::new(None);
+
+struct Api {
+    handles: usize,
 }
-
-pub struct Device {
-    inner: sys::AARTSAAPI_Device,
-}
-
-#[derive(Debug)]
-pub struct DeviceInfo {
-    inner: sys::AARTSAAPI_DeviceInfo,
-}
-
-impl DeviceInfo {
-    fn new() -> Self {
-        Self {
-            inner: sys::AARTSAAPI_DeviceInfo {
-                cbsize: std::mem::size_of::<sys::AARTSAAPI_DeviceInfo>() as _,
-                serialNumber: [0; 120],
-                ready: false,
-                boost: false,
-                superspeed: false,
-                active: false,
-            },
-        }
-    }
-}
-
-static API: OnceCell<Api> = OnceCell::new();
-
-struct Api;
 
 impl Api {
     fn new(mem: Memory) -> Self {
         unsafe { res(sys::AARTSAAPI_Init(mem.into())).unwrap() }
-        Self
+        Self { handles: 0 }
+    }
+
+    fn add_handle(&mut self) {
+        self.handles += 1;
+    }
+
+    fn remove_handle(&mut self) {
+        self.handles -= 1;
+    }
+
+    fn handles(&self) -> usize {
+        self.handles
     }
 }
 
@@ -62,14 +49,29 @@ impl ApiHandle {
     }
 
     pub fn with_mem(mem: Memory) -> std::result::Result<Self, Error> {
-        let _ = API.get_or_init(|| {
-            Api::new(mem)
-        });
+        let mut api = API.lock().unwrap();
+
+        if api.is_none() {
+            *api = Some(Api::new(mem));
+        }
 
         let mut h = sys::AARTSAAPI_Handle {
             d: std::ptr::null_mut(),
         };
-        unsafe { res(sys::AARTSAAPI_Open(&mut h)).map(|_| ApiHandle { inner: h }) }
+        unsafe {
+            match res(sys::AARTSAAPI_Open(&mut h)) {
+                Ok(()) => {
+                    api.as_mut().unwrap().add_handle();
+                    return Ok(ApiHandle { inner: h });
+                }
+                Err(e) => {
+                    if api.as_mut().unwrap().handles() == 0 {
+                        *api = None;
+                    }
+                    return Err(e);
+                }
+            }
+        }
     }
 
     pub fn rescan_devices(&mut self) -> Result {
@@ -101,10 +103,10 @@ impl ApiHandle {
                     &mut di.inner,
                 ))
             } {
-                    Ok(()) => devices.push(di),
-                    Err(Error::Empty) => break,
-                    Err(e) => return Err(e),
-                }
+                Ok(()) => devices.push(di),
+                Err(Error::Empty) => break,
+                Err(e) => return Err(e),
+            }
         }
 
         Ok(devices)
@@ -115,6 +117,45 @@ impl Drop for ApiHandle {
     fn drop(&mut self) {
         unsafe {
             res(sys::AARTSAAPI_Close(&mut self.inner)).expect("error dropping API handle");
+        }
+
+        let mut api = API.lock().unwrap();
+
+        api.as_mut().unwrap().remove_handle();
+        if api.as_mut().unwrap().handles() == 0 {
+            *api = None;
+        }
+    }
+}
+
+pub struct Config {
+    inner: sys::AARTSAAPI_Config,
+}
+
+pub struct ConfigInfo {
+    inner: sys::AARTSAAPI_ConfigInfo,
+}
+
+pub struct Device {
+    inner: sys::AARTSAAPI_Device,
+}
+
+#[derive(Debug)]
+pub struct DeviceInfo {
+    inner: sys::AARTSAAPI_DeviceInfo,
+}
+
+impl DeviceInfo {
+    fn new() -> Self {
+        Self {
+            inner: sys::AARTSAAPI_DeviceInfo {
+                cbsize: std::mem::size_of::<sys::AARTSAAPI_DeviceInfo>() as _,
+                serialNumber: [0; 120],
+                ready: false,
+                boost: false,
+                superspeed: false,
+                active: false,
+            },
         }
     }
 }
@@ -299,11 +340,6 @@ fn res(r: sys::AARTSAAPI_Result) -> Result {
         0x8000000d => Err(Error::ErrorValueMalformed),
         _ => Err(Error::Undocumented),
     }
-}
-
-pub fn version() -> String {
-    let n = unsafe { sys::AARTSAAPI_Version() };
-    format!("{}.{}", n >> 16, n & 0xffff)
 }
 
 //// Open a device for exclusive use.  This allocates the required data structures
