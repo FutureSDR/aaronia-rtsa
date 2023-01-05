@@ -15,7 +15,7 @@ struct Api {
 
 impl Api {
     fn new(mem: Memory) -> Self {
-        unsafe { res(sys::AARTSAAPI_Init(mem.into())).unwrap() }
+        unsafe { res(sys::AARTSAAPI_Init(mem.into())).expect("RTSA library initialization failed") }
         Self { handles: 0 }
     }
 
@@ -34,7 +34,7 @@ impl Api {
 
 impl Drop for Api {
     fn drop(&mut self) {
-        unsafe { res(sys::AARTSAAPI_Shutdown()).unwrap() }
+        unsafe { res(sys::AARTSAAPI_Shutdown()).expect("RTSA library shutdown failed") }
     }
 }
 
