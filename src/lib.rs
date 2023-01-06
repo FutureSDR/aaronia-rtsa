@@ -380,14 +380,14 @@ impl Device {
         Ok(())
     }
 
-    pub fn packet(&mut self) -> std::result::Result<Packet, Error> {
+    pub fn packet(&mut self, chan: i32) -> std::result::Result<Packet, Error> {
         let mut packet = Packet::new();
 
         loop {
             let ret = unsafe {
                 res(sys::AARTSAAPI_GetPacket(
                     &mut self.inner,
-                    0,
+                    chan,
                     0,
                     &mut packet.inner,
                 ))
@@ -402,8 +402,8 @@ impl Device {
         }
     }
 
-    pub fn consume(&mut self) -> Result {
-        unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, 0, 1)) }
+    pub fn consume(&mut self, chan: i32) -> Result {
+        unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, chan, 1)) }
     }
 
     pub fn print_config(&mut self) -> Result {
@@ -598,6 +598,7 @@ impl std::fmt::Debug for DeviceInfo {
     }
 }
 
+#[derive(Debug)]
 pub struct Packet {
     inner: sys::AARTSAAPI_Packet,
 }
@@ -626,6 +627,10 @@ impl Packet {
 
     pub fn samples(&self) -> &'static [num_complex::Complex32] {
         unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.num as _) }
+    }
+
+    pub fn spectrum(&self) -> &'static[f32] {
+        unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.size as _) }
     }
 }
 
