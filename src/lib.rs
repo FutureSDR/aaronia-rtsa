@@ -328,6 +328,58 @@ impl Device {
         Ok(())
     }
 
+    pub fn config_float<S1: AsRef<str>, F: Into<f64>>(&mut self, path: S1, value: F) -> Result {
+        let path = WideCString::from_str_truncate(path.as_ref());
+
+        let mut root = Config::new();
+        let mut node = Config::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigFind(
+                &mut self.inner,
+                &mut root.inner,
+                &mut node.inner,
+                path.as_ptr(),
+            ))?
+        };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigSetFloat(
+                &mut self.inner,
+                &mut node.inner,
+                value.into(),
+            ))?
+        };
+
+        Ok(())
+    }
+
+    pub fn config_int<S1: AsRef<str>, F: Into<i64>>(&mut self, path: S1, value: F) -> Result {
+        let path = WideCString::from_str_truncate(path.as_ref());
+
+        let mut root = Config::new();
+        let mut node = Config::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigFind(
+                &mut self.inner,
+                &mut root.inner,
+                &mut node.inner,
+                path.as_ptr(),
+            ))?
+        };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigSetInteger(
+                &mut self.inner,
+                &mut node.inner,
+                value.into(),
+            ))?
+        };
+
+        Ok(())
+    }
+
     pub fn packet(&mut self) -> std::result::Result<Packet, Error> {
         let mut packet = Packet::new();
 
