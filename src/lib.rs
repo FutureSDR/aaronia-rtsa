@@ -301,7 +301,27 @@ impl Device {
         }
     }
 
-    pub fn config<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
+    pub fn get<S: AsRef<str>>(&mut self, path: S) -> std::result::Result<ConfigItem, Error> {
+        let mut root = Config::new();
+        let mut node = Config::new();
+        let path = WideCString::from_str_truncate(path.as_ref());
+
+        unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigFind(
+                &mut self.inner,
+                &mut root.inner,
+                &mut node.inner,
+                path.as_ptr(),
+            ))?
+        };
+
+        let (_, item) = self.parse_item(&mut root)?;
+
+        Ok(item)
+    }
+
+    pub fn set<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
         let value = WideCString::from_str_truncate(value.as_ref());
 
@@ -328,7 +348,7 @@ impl Device {
         Ok(())
     }
 
-    pub fn config_float<S1: AsRef<str>, F: Into<f64>>(&mut self, path: S1, value: F) -> Result {
+    pub fn set_float<S1: AsRef<str>, F: Into<f64>>(&mut self, path: S1, value: F) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
 
         let mut root = Config::new();
@@ -354,7 +374,7 @@ impl Device {
         Ok(())
     }
 
-    pub fn config_int<S1: AsRef<str>, F: Into<i64>>(&mut self, path: S1, value: F) -> Result {
+    pub fn set_int<S1: AsRef<str>, F: Into<i64>>(&mut self, path: S1, value: F) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
 
         let mut root = Config::new();
@@ -380,6 +400,12 @@ impl Device {
         Ok(())
     }
 
+    pub fn packets_avail(&mut self, chan: i32) -> std::result::Result<usize, Error> {
+        let mut n = 0i32;
+        unsafe { res(sys::AARTSAAPI_AvailPackets(&mut self.inner, chan, &mut n))? };
+        Ok(n as usize)
+    }
+
     pub fn packet(&mut self, chan: i32) -> std::result::Result<Packet, Error> {
         let mut packet = Packet::new();
 
@@ -402,6 +428,17 @@ impl Device {
         }
     }
 
+    pub fn clock(&mut self) -> std::result::Result<f64, Error> {
+        let mut val = 0.0f64;
+        unsafe {
+            res(sys::AARTSAAPI_GetMasterStreamTime(
+                &mut self.inner,
+                &mut val,
+            ))?
+        };
+        Ok(val)
+    }
+
     pub fn consume(&mut self, chan: i32) -> Result {
         unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, chan, 1)) }
     }
@@ -415,7 +452,7 @@ impl Device {
         let (name, item) = self.parse_item(&mut root)?;
         conf.insert(name, item);
 
-        println!("config: {:#?}", conf);
+        println!("config: {conf:#?}");
 
         Ok(())
     }
@@ -425,12 +462,17 @@ impl Device {
 
         let mut root = Config::new();
 
-        unsafe { res(sys::AARTSAAPI_ConfigHealth(&mut self.inner, &mut root.inner))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigHealth(
+                &mut self.inner,
+                &mut root.inner,
+            ))?
+        };
 
         let (name, item) = self.parse_item(&mut root)?;
         conf.insert(name, item);
 
-        println!("health: {:#?}", conf);
+        println!("health: {conf:#?}");
 
         Ok(())
     }
@@ -532,7 +574,7 @@ impl Device {
 }
 
 #[derive(Debug)]
-enum ConfigItem {
+pub enum ConfigItem {
     Blob,
     Bool(bool),
     Button,
@@ -629,7 +671,7 @@ impl Packet {
         unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.num as _) }
     }
 
-    pub fn spectrum(&self) -> &'static[f32] {
+    pub fn spectrum(&self) -> &'static [f32] {
         unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.size as _) }
     }
 }
@@ -695,8 +737,8 @@ pub struct PacketFlags {
 }
 
 impl PacketFlags {
-    pub fn new(v: u64) -> Self {
-        PacketFlags { v }
+    pub fn new() -> Self {
+        PacketFlags { v: 0 }
     }
     pub fn segment_start(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_SEGMENT_START as u64 != 0
@@ -709,6 +751,40 @@ impl PacketFlags {
     }
     pub fn stream_end(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_STREAM_END as u64 != 0
+    }
+    pub fn set_segment_start(&mut self) -> &mut Self {
+        self.v |= sys::AARTSAAPI_PACKET_SEGMENT_START as u64;
+        self
+    }
+    pub fn set_segment_end(&mut self) -> &mut Self {
+        self.v |= sys::AARTSAAPI_PACKET_SEGMENT_END as u64;
+        self
+    }
+    pub fn set_stream_start(&mut self) -> &mut Self {
+        self.v |= sys::AARTSAAPI_PACKET_STREAM_START as u64;
+        self
+    }
+    pub fn set_stream_end(&mut self) -> &mut Self {
+        self.v |= sys::AARTSAAPI_PACKET_STREAM_END as u64;
+        self
+    }
+}
+
+impl From<PacketFlags> for u64 {
+    fn from(value: PacketFlags) -> Self {
+        value.v
+    }
+}
+
+impl From<u64> for PacketFlags {
+    fn from(value: u64) -> Self {
+        Self { v: value }
+    }
+}
+
+impl Default for PacketFlags {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

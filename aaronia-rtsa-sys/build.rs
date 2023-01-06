@@ -1,7 +1,6 @@
 use std::env;
 use std::path::PathBuf;
 
-
 #[cfg(not(windows))]
 fn search() -> Option<String> {
     const LIB: &str = "AaroniaRTSAAPI";

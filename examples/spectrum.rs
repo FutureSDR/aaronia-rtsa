@@ -8,17 +8,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut api = ApiHandle::new()?;
     api.rescan_devices()?;
     let d = api.devices()?;
-    println!("devices {:?}", d);
+    println!("devices {d:?}");
 
     let mut dev = api.get_device()?;
     dev.open()?;
-    dev.config("device/receiverchannel", "Rx1")?;
-    dev.config("device/outputformat", "spectra")?;
-    dev.config("device/receiverclock", "92MHz")?;
-    dev.config("device/fft0/fftmergemode", "max")?;
-    dev.config("device/fft0/fftaggregate", "100")?;
-    dev.config("main/centerfreq", "810e6")?;
-    dev.config("main/reflevel", "-20")?;
+    dev.set("device/receiverchannel", "Rx1")?;
+    dev.set("device/outputformat", "spectra")?;
+    dev.set("device/receiverclock", "92MHz")?;
+    dev.set("device/fft0/fftmergemode", "max")?;
+    dev.set("device/fft0/fftaggregate", "100")?;
+    dev.set("main/centerfreq", "810e6")?;
+    dev.set("main/reflevel", "-20")?;
     dev.connect()?;
     dev.start()?;
 

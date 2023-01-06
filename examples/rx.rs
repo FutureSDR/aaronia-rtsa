@@ -9,16 +9,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut api = ApiHandle::new()?;
     api.rescan_devices()?;
     let d = api.devices()?;
-    println!("devices {:?}", d);
+    println!("devices {d:?}");
 
     let mut dev = api.get_device()?;
     dev.open()?;
-    dev.config("device/receiverchannel", "Rx1")?;
-    dev.config("device/outputformat", "iq")?;
-    dev.config("device/receiverclock", "92MHz")?;
-    dev.config("main/decimation", "1 / 64")?;
-    dev.config("main/centerfreq", "810e6")?;
-    dev.config("main/reflevel", "-20")?;
+    dev.set("device/receiverchannel", "Rx1")?;
+    dev.set("device/outputformat", "iq")?;
+    dev.set("device/receiverclock", "92MHz")?;
+    dev.set("main/decimation", "1 / 64")?;
+    dev.set("main/centerfreq", "810e6")?;
+    dev.set("main/reflevel", "-20")?;
     dev.connect()?;
     dev.start()?;
 
