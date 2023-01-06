@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
+use std::collections::HashMap;
 use std::sync::Mutex;
 use widestring::WideCString;
 
@@ -174,7 +175,7 @@ impl ConfigInfo {
                 unit: [0; 10],
                 options: [0; 1000],
                 disabledOptions: 0,
-            }
+            },
         }
     }
 }
@@ -354,58 +355,140 @@ impl Device {
     }
 
     pub fn print_config(&mut self) -> Result {
-        let mut conf = std::collections::HashMap::<String, ConfigItem>::new();
-
+        let mut conf = HashMap::<String, ConfigItem>::new();
         let mut root = Config::new();
-        // let mut node = Config::new();
 
         unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
-        conf.insert("root".to_string(), self.parse_item(&mut root)?);
 
-        // let mut path = vec![];
-        //
-        // unsafe { res(sys::AARTSAAPI_ConfigFirst(&mut self.inner, &mut root.inner, &mut node.inner))? };
-        //
-        // loop {
-        //     match unsafe { dbg!(res(sys::AARTSAAPI_ConfigFirst(&mut self.inner, &mut root.inner, &mut node.inner))) } {
-        //         Ok(_) => {
-        //             println!("node {:?}", node);
-        //         },
-        //         Err(Error::Empty) => break,
-        //         Err(e) => return Err(e),
-        //     }
-        // }
-        println!("config: {:?}", conf);
-        
+        let (name, item) = self.parse_item(&mut root)?;
+        conf.insert(name, item);
+
+        println!("config: {:#?}", conf);
+
         Ok(())
     }
 
-    fn parse_item(&mut self, node: &mut Config) -> std::result::Result<ConfigItem, Error> {
+    pub fn print_health(&mut self) -> Result {
+        let mut conf = HashMap::<String, ConfigItem>::new();
+
+        let mut root = Config::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigHealth(&mut self.inner, &mut root.inner))? };
+
+        let (name, item) = self.parse_item(&mut root)?;
+        conf.insert(name, item);
+
+        println!("health: {:#?}", conf);
+
+        Ok(())
+    }
+
+    fn parse_item(
+        &mut self,
+        node: &mut Config,
+    ) -> std::result::Result<(String, ConfigItem), Error> {
         let mut info = ConfigInfo::new();
 
-        unsafe { res(sys::AARTSAAPI_ConfigGetInfo(&mut self.inner, &mut node.inner, &mut info.inner))? };
+        unsafe {
+            res(sys::AARTSAAPI_ConfigGetInfo(
+                &mut self.inner,
+                &mut node.inner,
+                &mut info.inner,
+            ))?
+        };
 
-        match info.inner.type_ {
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BLOB => Ok(ConfigItem::Blob),
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BOOL => Ok(ConfigItem::Bool),
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_ENUM => Ok(ConfigItem::Enum),
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_GROUP => Ok(ConfigItem::Group),
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_NUMBER => Ok(ConfigItem::Number),
-            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_STRING => Ok(ConfigItem::String),
-            _ => Ok(ConfigItem::Other),
-        }
+        let item = match info.inner.type_ {
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BLOB => ConfigItem::Blob,
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BOOL => {
+                let mut val = 0i64;
+                match unsafe {
+                    res(sys::AARTSAAPI_ConfigGetInteger(
+                        &mut self.inner,
+                        &mut node.inner,
+                        &mut val,
+                    ))
+                } {
+                    Ok(_) => ConfigItem::Bool(val > 0),
+                    Err(Error::ErrorInvalidConfig) => ConfigItem::Button,
+                    Err(e) => return Err(e),
+                }
+            }
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_ENUM => {
+                let s = WideCString::from_vec_truncate(info.inner.options)
+                    .to_string_lossy()
+                    .split(';')
+                    .map(|s| s.into())
+                    .collect();
+                ConfigItem::Enum(s)
+            }
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_NUMBER => {
+                let mut num = 0.0f64;
+                unsafe {
+                    res(sys::AARTSAAPI_ConfigGetFloat(
+                        &mut self.inner,
+                        &mut node.inner,
+                        &mut num,
+                    ))?
+                };
+                ConfigItem::Number(num)
+            }
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_STRING => ConfigItem::String(
+                WideCString::from_vec_truncate(info.inner.options).to_string_lossy(),
+            ),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_GROUP => {
+                let mut items = HashMap::new();
+                let mut n = Config::new();
+
+                unsafe {
+                    res(sys::AARTSAAPI_ConfigFirst(
+                        &mut self.inner,
+                        &mut node.inner,
+                        &mut n.inner,
+                    ))?
+                };
+
+                let (name, item) = self.parse_item(&mut n)?;
+                items.insert(name, item);
+
+                loop {
+                    match unsafe {
+                        res(sys::AARTSAAPI_ConfigNext(
+                            &mut self.inner,
+                            &mut node.inner,
+                            &mut n.inner,
+                        ))
+                    } {
+                        Ok(_) => {
+                            let (name, item) = self.parse_item(&mut n)?;
+                            items.insert(name, item);
+                        }
+                        Err(Error::Empty) => break,
+                        Err(e) => return Err(e),
+                    }
+                }
+
+                ConfigItem::Group(items)
+            }
+            _ => ConfigItem::Other,
+        };
+
+        Ok((
+            WideCString::from_vec_truncate(info.inner.name).to_string_lossy(),
+            item,
+        ))
     }
 }
 
 #[derive(Debug)]
 enum ConfigItem {
     Blob,
-    Bool,
-    Enum,
-    Group,
-    Number,
+    Bool(bool),
+    Button,
+    Enum(Vec<String>),
+    Group(HashMap<String, ConfigItem>),
+    Number(f64),
     Other,
-    String,
+    String(String),
 }
 
 impl Drop for Device {
