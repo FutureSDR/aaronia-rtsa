@@ -17,9 +17,9 @@ fn search() -> Option<String> {
         let lib_path = dir.join(LIB_NAME);
         let inc_path = dir.join(HEADER_NAME);
         if lib_path.is_file() && inc_path.is_file() {
-            let dir = dir.to_str().expect("sdk path not valid utf-8");
+            let dir = dir.to_string_lossy();
             println!("cargo:rustc-link-search={dir}");
-            return Some(dir.to_string());
+            return Some(dir.into());
         }
     }
     None
@@ -40,10 +40,10 @@ fn search() -> Option<String> {
         let lib_path = dir.join("sdk").join(LIB_NAME);
         let inc_path = dir.join("sdk").join(HEADER_NAME);
         if lib_path.is_file() && inc_path.is_file() {
-            let lib_dir = dir.to_str().expect("sdk path not valid utf-8");
+            let lib_dir = dir.to_string_lossy();
             println!("cargo:rustc-link-search={lib_dir}");
-            let dir = dir.join("sdk").to_str().expect("sdk path not valid utf-8");
-            return Some(dir.to_string());
+            let dir = dir.join("sdk").to_string_lossy().into();
+            return Some(dir);
         }
     }
     None
