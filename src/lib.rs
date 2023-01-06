@@ -316,7 +316,7 @@ impl Device {
             ))?
         };
 
-        let (_, item) = self.parse_item(&mut root)?;
+        let (_, item) = self.parse_item(&mut node)?;
 
         Ok(item)
     }
@@ -513,7 +513,16 @@ impl Device {
                     .split(';')
                     .map(|s| s.into())
                     .collect();
-                ConfigItem::Enum(s)
+
+                let mut val = 0i64;
+                unsafe {
+                    res(sys::AARTSAAPI_ConfigGetInteger(
+                        &mut self.inner,
+                        &mut node.inner,
+                        &mut val,
+                    ))?
+                }
+                ConfigItem::Enum(val, s)
             }
             sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_NUMBER => {
                 let mut num = 0.0f64;
@@ -578,7 +587,7 @@ pub enum ConfigItem {
     Blob,
     Bool(bool),
     Button,
-    Enum(Vec<String>),
+    Enum(i64, Vec<String>),
     Group(HashMap<String, ConfigItem>),
     Number(f64),
     Other,
