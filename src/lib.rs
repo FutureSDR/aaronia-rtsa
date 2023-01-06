@@ -160,6 +160,25 @@ struct ConfigInfo {
     inner: sys::AARTSAAPI_ConfigInfo,
 }
 
+impl ConfigInfo {
+    fn new() -> Self {
+        Self {
+            inner: sys::AARTSAAPI_ConfigInfo {
+                cbsize: std::mem::size_of::<sys::AARTSAAPI_ConfigInfo>() as _,
+                name: [0; 80],
+                title: [0; 120],
+                type_: 0,
+                minValue: 0.0,
+                maxValue: 0.0,
+                stepValue: 0.0,
+                unit: [0; 10],
+                options: [0; 1000],
+                disabledOptions: 0,
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum DeviceStatus {
     Uninit,
@@ -333,6 +352,60 @@ impl Device {
     pub fn consume(&mut self) -> Result {
         unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, 0, 1)) }
     }
+
+    pub fn print_config(&mut self) -> Result {
+        let mut conf = std::collections::HashMap::<String, ConfigItem>::new();
+
+        let mut root = Config::new();
+        // let mut node = Config::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigRoot(&mut self.inner, &mut root.inner))? };
+        conf.insert("root".to_string(), self.parse_item(&mut root)?);
+
+        // let mut path = vec![];
+        //
+        // unsafe { res(sys::AARTSAAPI_ConfigFirst(&mut self.inner, &mut root.inner, &mut node.inner))? };
+        //
+        // loop {
+        //     match unsafe { dbg!(res(sys::AARTSAAPI_ConfigFirst(&mut self.inner, &mut root.inner, &mut node.inner))) } {
+        //         Ok(_) => {
+        //             println!("node {:?}", node);
+        //         },
+        //         Err(Error::Empty) => break,
+        //         Err(e) => return Err(e),
+        //     }
+        // }
+        println!("config: {:?}", conf);
+        
+        Ok(())
+    }
+
+    fn parse_item(&mut self, node: &mut Config) -> std::result::Result<ConfigItem, Error> {
+        let mut info = ConfigInfo::new();
+
+        unsafe { res(sys::AARTSAAPI_ConfigGetInfo(&mut self.inner, &mut node.inner, &mut info.inner))? };
+
+        match info.inner.type_ {
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BLOB => Ok(ConfigItem::Blob),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_BOOL => Ok(ConfigItem::Bool),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_ENUM => Ok(ConfigItem::Enum),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_GROUP => Ok(ConfigItem::Group),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_NUMBER => Ok(ConfigItem::Number),
+            sys::AARTSAAPI_ConfigType_AARTSAAPI_CONFIG_TYPE_STRING => Ok(ConfigItem::String),
+            _ => Ok(ConfigItem::Other),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ConfigItem {
+    Blob,
+    Bool,
+    Enum,
+    Group,
+    Number,
+    Other,
+    String,
 }
 
 impl Drop for Device {
