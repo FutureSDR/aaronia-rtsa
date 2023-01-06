@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 
 #[cfg(not(windows))]
-fn search() -> Option<PathBuf> {
+fn search() -> Option<String> {
     const LIB: &str = "AaroniaRTSAAPI";
     const LIB_NAME: &str = "libAaroniaRTSAAPI.so";
     const HEADER_NAME: &str = "aaroniartsaapi.h";
@@ -17,14 +17,16 @@ fn search() -> Option<PathBuf> {
         let lib_path = dir.join(LIB_NAME);
         let inc_path = dir.join(HEADER_NAME);
         if lib_path.is_file() && inc_path.is_file() {
-            return Some(dir);
+            let dir = dir.to_str().expect("sdk path not valid utf-8");
+            println!("cargo:rustc-link-search={dir}");
+            return Some(dir.to_string());
         }
     }
     None
 }
 
 #[cfg(windows)]
-fn search() -> Option<PathBuf> {
+fn search() -> Option<String> {
     const LIB: &str = "AaroniaRTSAAPI";
     const LIB_NAME: &str = "AaroniaRTSAAPI.lib";
     const HEADER_NAME: &str = "aaroniartsaapi.h";
@@ -38,7 +40,10 @@ fn search() -> Option<PathBuf> {
         let lib_path = dir.join("sdk").join(LIB_NAME);
         let inc_path = dir.join("sdk").join(HEADER_NAME);
         if lib_path.is_file() && inc_path.is_file() {
-            return Some(dir);
+            let lib_dir = dir.to_str().expect("sdk path not valid utf-8");
+            println!("cargo:rustc-link-search={lib_dir}");
+            let dir = dir.join("sdk").to_str().expect("sdk path not valid utf-8");
+            return Some(dir.to_string());
         }
     }
     None
@@ -46,16 +51,14 @@ fn search() -> Option<PathBuf> {
 
 fn main() {
     let dir = search().expect("sdk not found, set RTSA_DIR environment variable");
-    let dir = dir.to_str().expect("sdk path not valid utf-8");
 
-    println!("cargo:rustc-link-search={dir}");
     println!("cargo:rerun-if-env-changed=RTSA_DIR");
 
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
         .clang_arg("-std=c++14")
-        .clang_arg(format!("-I{dir}/sdk"))
+        .clang_arg(format!("-I{dir}"))
         .header("wrapper.h")
         .allowlist_function("AARTSAAPI.*")
         .allowlist_var("AARTSAAPI.*")
