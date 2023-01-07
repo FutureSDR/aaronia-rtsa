@@ -428,6 +428,29 @@ impl Device {
         }
     }
 
+    pub fn try_packet(&mut self, chan: i32) -> std::result::Result<Packet, Error> {
+        let mut packet = Packet::new();
+
+        unsafe {
+            res(sys::AARTSAAPI_GetPacket(
+                &mut self.inner,
+                chan,
+                0,
+                &mut packet.inner,
+            ))
+        }.map(|_| packet)
+    }
+
+    pub fn send_packet(&mut self, chan: i32, packet: &Packet) -> Result {
+        unsafe {
+            res(sys::AARTSAAPI_SendPacket(
+                &mut self.inner,
+                chan,
+                &packet.inner,
+            ))
+        }
+    }
+
     pub fn clock(&mut self) -> std::result::Result<f64, Error> {
         let mut val = 0.0f64;
         unsafe {
