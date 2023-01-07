@@ -1,9 +1,9 @@
-#![allow(dead_code)]
 use aaronia_rtsa_sys as sys;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use widestring::WideCString;
 
+/// Version String (`<major>.<minor>`)
 pub fn version() -> String {
     let n = unsafe { sys::AARTSAAPI_Version() };
     format!("{}.{}", n >> 16, n & 0xffff)
@@ -40,16 +40,27 @@ impl Drop for Api {
     }
 }
 
+/// Handle to interface the library
+///
+/// Internally, all [`ApiHandle`]s use one global library handle, which is dropped when there are
+/// no [`ApiHandle`]s left. Only the first handle, i.e., the one that creates the global library
+/// handle can configure the [`Memory`] size. Later created [`ApiHandle`]s ignore the memory
+/// parameter.
 #[derive(Debug)]
 pub struct ApiHandle {
     inner: sys::AARTSAAPI_Handle,
 }
 
 impl ApiHandle {
+    /// Create [`ApiHandle`] with default [`Memory`] size medium.
     pub fn new() -> std::result::Result<Self, Error> {
         Self::with_mem(Memory::Medium)
     }
 
+    /// Create [`ApiHandle`] with given [`Memory`] size.
+    ///
+    /// The memory size is only considered, if this is the first [`ApiHandle`], i.e. the
+    /// one that initializes the underlying RTSA library.
     pub fn with_mem(mem: Memory) -> std::result::Result<Self, Error> {
         let mut api = API.lock().unwrap();
 
@@ -75,7 +86,8 @@ impl ApiHandle {
             }
         }
     }
-
+    
+    /// Rescan for devices.
     pub fn rescan_devices(&mut self) -> Result {
         loop {
             let r = unsafe { res(sys::AARTSAAPI_RescanDevices(&mut self.inner, 10000)) };
@@ -87,10 +99,12 @@ impl ApiHandle {
         }
     }
 
+    /// Reset all devices.
     pub fn reset_devices(&mut self) -> Result {
         unsafe { res(sys::AARTSAAPI_ResetDevices(&mut self.inner)) }
     }
 
+    /// Get a list with information about all detected devices.
     pub fn devices(&mut self) -> std::result::Result<Vec<DeviceInfo>, Error> {
         let mut devices = Vec::new();
         let device_type = WideCString::from_str_truncate("spectranv6");
@@ -114,6 +128,7 @@ impl ApiHandle {
         Ok(devices)
     }
 
+    /// Get the first detected [`Device`].
     pub fn get_device(&mut self) -> std::result::Result<Device, Error> {
         let devs = self.devices()?;
         if let Some(d) = devs.get(0) {
@@ -123,6 +138,9 @@ impl ApiHandle {
         }
     }
 
+    /// Get a specific [`Device`], identified by its [`DeviceInfo`].
+    ///
+    /// The [DeviceInfo] can be get from the [devices()](Self::devices) function.
     pub fn get_this_device(&mut self, info: &DeviceInfo) -> std::result::Result<Device, Error> {
         Device::new(info)
     }
@@ -188,6 +206,7 @@ enum DeviceStatus {
     Started,
 }
 
+/// Device state can be queried with [`Device::state()`]
 #[derive(Debug, PartialEq)]
 pub enum DeviceState {
     Idle,
@@ -216,6 +235,17 @@ impl TryInto<DeviceState> for Error {
     }
 }
 
+/// A device, created through the [ApiHandle].
+///
+/// The typical life-cycle of a device is:
+/// - Create with [`ApiHandle`]
+/// - [`Device::open()`]
+/// - Configure with [`Device::set()`], [`Device::set_int()`], and [`Device::set_float()`]
+/// - [`Device::connect()`]
+/// - [`Device::start()`]
+/// - [`Device::stop()`]
+/// - [`Device::disconnect()`]
+/// - [`Device::close()`]
 pub struct Device {
     inner: sys::AARTSAAPI_Device,
     api: ApiHandle,
@@ -235,6 +265,10 @@ impl Device {
         })
     }
 
+    /// Open a device for exclusive use.
+    ///
+    /// This allocates the required data structures and prepares the configuration settings, but
+    /// will not access the hardware.
     pub fn open(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Uninit);
         let device_type = WideCString::from_str_truncate("spectranv6/raw");
@@ -656,6 +690,21 @@ impl DeviceInfo {
             },
         }
     }
+    pub fn serial(&self) -> String {
+        WideCString::from_vec_truncate(self.inner.serialNumber).to_string_lossy()
+    }
+    pub fn ready(&self) -> bool {
+        self.inner.ready
+    }
+    pub fn boost(&self) -> bool {
+        self.inner.boost
+    }
+    pub fn superspeed(&self) -> bool {
+        self.inner.superspeed
+    }
+    pub fn active(&self) -> bool {
+        self.inner.active
+    }
 }
 
 impl std::fmt::Debug for DeviceInfo {
@@ -710,7 +759,7 @@ impl Packet {
 }
 
 #[derive(Debug, Clone)]
-pub enum ConfigType {
+enum ConfigType {
     Other,
     Group,
     Blob,
