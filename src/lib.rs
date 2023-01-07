@@ -438,7 +438,8 @@ impl Device {
                 0,
                 &mut packet.inner,
             ))
-        }.map(|_| packet)
+        }
+        .map(|_| packet)
     }
 
     pub fn send_packet(&mut self, chan: i32, packet: &Packet) -> Result {

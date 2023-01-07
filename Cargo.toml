@@ -1,6 +1,6 @@
 [package]
 name = "aaronia-rtsa"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Driver for Aaronia RTSA"
@@ -12,7 +12,7 @@ members = [
 ]
 
 [dependencies]
-aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.2" }
+aaronia-rtsa-sys = { path = "./aaronia-rtsa-sys", version = "0.0.3" }
 gnuplot = "0.0.37"
 num-complex = "0.4.2"
 rustfft = "6.1.0"
