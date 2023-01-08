@@ -1,6 +1,6 @@
 # High-level bindings for the Aaronia RTSA library, allowing to interface Spectran v6 devices
 
-The library supports both Windows and Linux. See the [examples directory](https://github.com/FutureSDR/aaronia-rtsa/tree/main/examples) and the [documentation](https://docs.rs/crate/aaronia-rtsa/latest) for more information.
+The library supports both Windows and Linux. See the [examples directory](https://github.com/FutureSDR/aaronia-rtsa/tree/main/examples) and the [documentation](https://www.fleark.de/doc/aaronia_rtsa/) for more information.
 
 Important:
 - Windows binaries have to be executed from the RTSA directory. This is a limitation of the Aaronia Windows SDK.
