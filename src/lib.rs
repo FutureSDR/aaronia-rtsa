@@ -86,7 +86,7 @@ impl ApiHandle {
             }
         }
     }
-    
+
     /// Rescan for devices.
     pub fn rescan_devices(&mut self) -> Result {
         loop {
@@ -265,7 +265,7 @@ impl Device {
         })
     }
 
-    /// Open a device for exclusive use.
+    /// Open the [`Device`] for exclusive use.
     ///
     /// This allocates the required data structures and prepares the configuration settings, but
     /// will not access the hardware.
@@ -287,6 +287,7 @@ impl Device {
         Ok(())
     }
 
+    /// Close the [`Device`] for exclusive use.
     pub fn close(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Opened);
         unsafe {
@@ -299,6 +300,7 @@ impl Device {
         Ok(())
     }
 
+    /// Connect to the [`Device`].
     pub fn connect(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Opened);
         unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
@@ -306,6 +308,7 @@ impl Device {
         Ok(())
     }
 
+    /// Disconnect from the [`Device`].
     pub fn disconnect(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Connected);
         unsafe { res(sys::AARTSAAPI_ConnectDevice(&mut self.inner))? }
@@ -313,6 +316,7 @@ impl Device {
         Ok(())
     }
 
+    /// Start data acqusition from the [`Device] / data transmission to the [`Device`].
     pub fn start(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Connected);
         unsafe { res(sys::AARTSAAPI_StartDevice(&mut self.inner))? }
@@ -320,6 +324,7 @@ impl Device {
         Ok(())
     }
 
+    /// Stop data acqusition from the [`Device`] / data transmission to the [`Device`].
     pub fn stop(&mut self) -> Result {
         assert_eq!(self.status, DeviceStatus::Started);
         unsafe { res(sys::AARTSAAPI_StopDevice(&mut self.inner))? }
@@ -327,6 +332,7 @@ impl Device {
         Ok(())
     }
 
+    /// Get [`DeviceState`] from the [`Device`].
     pub fn state(&mut self) -> std::result::Result<DeviceState, Error> {
         let res = unsafe { res(sys::AARTSAAPI_GetDeviceState(&mut self.inner)) };
         match res {
@@ -335,6 +341,7 @@ impl Device {
         }
     }
 
+    /// Get [`Device`] configuration parameter.
     pub fn get<S: AsRef<str>>(&mut self, path: S) -> std::result::Result<ConfigItem, Error> {
         let mut root = Config::new();
         let mut node = Config::new();
@@ -355,6 +362,7 @@ impl Device {
         Ok(item)
     }
 
+    /// Set [`Device`] configuration parameter as string.
     pub fn set<S1: AsRef<str>, S2: AsRef<str>>(&mut self, path: S1, value: S2) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
         let value = WideCString::from_str_truncate(value.as_ref());
@@ -382,6 +390,7 @@ impl Device {
         Ok(())
     }
 
+    /// Set [`Device`] configuration parameter as float.
     pub fn set_float<S1: AsRef<str>, F: Into<f64>>(&mut self, path: S1, value: F) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
 
@@ -408,6 +417,7 @@ impl Device {
         Ok(())
     }
 
+    /// Set [`Device`] configuration parameter as integer.
     pub fn set_int<S1: AsRef<str>, F: Into<i64>>(&mut self, path: S1, value: F) -> Result {
         let path = WideCString::from_str_truncate(path.as_ref());
 
@@ -434,12 +444,16 @@ impl Device {
         Ok(())
     }
 
+    /// Query [`Packet`] queue of [`Device`] data channel.
     pub fn packets_avail(&mut self, chan: i32) -> std::result::Result<usize, Error> {
         let mut n = 0i32;
         unsafe { res(sys::AARTSAAPI_AvailPackets(&mut self.inner, chan, &mut n))? };
         Ok(n as usize)
     }
 
+    /// Get [`Packet`] from the [`Device`].
+    ///
+    /// This call is blocking, polling the queue every 5ms, in case it is empty.
     pub fn packet(&mut self, chan: i32) -> std::result::Result<Packet, Error> {
         let mut packet = Packet::new();
 
@@ -462,6 +476,9 @@ impl Device {
         }
     }
 
+    /// Try to get a [`Packet`] from the [`Device`] data channel.
+    ///
+    /// This call is non-blocking.
     pub fn try_packet(&mut self, chan: i32) -> std::result::Result<Packet, Error> {
         let mut packet = Packet::new();
 
@@ -476,6 +493,7 @@ impl Device {
         .map(|_| packet)
     }
 
+    /// Send a [`Packet`] to the [`Device`] data channel.
     pub fn send_packet(&mut self, chan: i32, packet: &Packet) -> Result {
         unsafe {
             res(sys::AARTSAAPI_SendPacket(
@@ -486,6 +504,12 @@ impl Device {
         }
     }
 
+    /// Consume a [`Packet`] from a [`Device`] data channel.
+    pub fn consume(&mut self, chan: i32) -> Result {
+        unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, chan, 1)) }
+    }
+
+    /// Get [`Device`] clock time.
     pub fn clock(&mut self) -> std::result::Result<f64, Error> {
         let mut val = 0.0f64;
         unsafe {
@@ -497,10 +521,7 @@ impl Device {
         Ok(val)
     }
 
-    pub fn consume(&mut self, chan: i32) -> Result {
-        unsafe { res(sys::AARTSAAPI_ConsumePackets(&mut self.inner, chan, 1)) }
-    }
-
+    /// Print the [`Device`] configuration parameter tree.
     pub fn print_config(&mut self) -> Result {
         let mut conf = HashMap::<String, ConfigItem>::new();
         let mut root = Config::new();
@@ -515,6 +536,7 @@ impl Device {
         Ok(())
     }
 
+    /// Print the [`Device`] health parameter tree.
     pub fn print_health(&mut self) -> Result {
         let mut conf = HashMap::<String, ConfigItem>::new();
 
@@ -640,6 +662,7 @@ impl Device {
     }
 }
 
+/// [`Device`] configuration parameter.
 #[derive(Debug)]
 pub enum ConfigItem {
     Blob,
@@ -672,6 +695,9 @@ impl Drop for Device {
     }
 }
 
+/// Information about a [`Device`].
+///
+/// Can be used to identify the device for opening.
 #[derive(Clone)]
 pub struct DeviceInfo {
     inner: sys::AARTSAAPI_DeviceInfo,
@@ -722,6 +748,9 @@ impl std::fmt::Debug for DeviceInfo {
     }
 }
 
+/// Packet that holds IQ or spectrum data.
+///
+/// Packets are used for RX and TX.
 #[derive(Debug)]
 pub struct Packet {
     inner: sys::AARTSAAPI_Packet,
@@ -749,10 +778,61 @@ impl Packet {
         }
     }
 
+    /// Get stream ID.
+    pub fn stream_id(&self) -> u64 {
+        self.inner.streamID
+    }
+    /// Get packet flags.
+    pub fn flags(&self) -> PacketFlags {
+        PacketFlags::from(self.inner.flags)
+    }
+    /// Get packet start time.
+    pub fn start_time(&self) -> f64 {
+        self.inner.startTime
+    }
+    /// Get packet end time.
+    pub fn end_time(&self) -> f64 {
+        self.inner.endTime
+    }
+    /// Get packet start frequency.
+    pub fn start_frequency(&self) -> f64 {
+        self.inner.startFrequency
+    }
+    /// Get packet step frequency.
+    pub fn step_frequency(&self) -> f64 {
+        self.inner.stepFrequency
+    }
+    /// Get packet span frequency.
+    pub fn span_frequency(&self) -> f64 {
+        self.inner.spanFrequency
+    }
+    /// Get packet real-time bandwidth.
+    pub fn rbw_frequency(&self) -> f64 {
+        self.inner.rbwFrequency
+    }
+    /// Get number of items in stride.
+    pub fn num(&self) -> i64 {
+        self.inner.num
+    }
+    /// Get total number of items in packet.
+    pub fn total(&self) -> i64 {
+        self.inner.total
+    }
+    /// Get total size of packet.
+    pub fn size(&self) -> i64 {
+        self.inner.size
+    }
+    /// Get sample stride.
+    pub fn stride(&self) -> i64 {
+        self.inner.stride
+    }
+
+    /// Get IQ samples from packet.
     pub fn samples(&self) -> &'static [num_complex::Complex32] {
         unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.num as _) }
     }
 
+    /// Get spectrum data from packet.
     pub fn spectrum(&self) -> &'static [f32] {
         unsafe { std::slice::from_raw_parts(self.inner.fp32 as _, self.inner.size as _) }
     }
@@ -783,6 +863,7 @@ impl From<std::os::raw::c_uint> for ConfigType {
     }
 }
 
+/// Options for memory sizes, used by the RTSA library.
 #[derive(Debug, Clone)]
 pub enum Memory {
     Small,
@@ -813,39 +894,49 @@ impl From<Memory> for u32 {
     }
 }
 
+/// Packet Flags
 #[derive(Debug, Clone)]
 pub struct PacketFlags {
     v: u64,
 }
 
 impl PacketFlags {
+    /// Create struct, setting all flags to false.
     pub fn new() -> Self {
         PacketFlags { v: 0 }
     }
+    /// Is packet start of a segment?
     pub fn segment_start(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_SEGMENT_START as u64 != 0
     }
+    /// Is packet end of a segment?
     pub fn segment_end(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_SEGMENT_END as u64 != 0
     }
+    /// Is packet start of a stream?
     pub fn stream_start(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_STREAM_START as u64 != 0
     }
+    /// Is packet end of a stream?
     pub fn stream_end(&self) -> bool {
         self.v & sys::AARTSAAPI_PACKET_STREAM_END as u64 != 0
     }
+    /// Set flag to indicate start of a segment.
     pub fn set_segment_start(&mut self) -> &mut Self {
         self.v |= sys::AARTSAAPI_PACKET_SEGMENT_START as u64;
         self
     }
+    /// Set flag to indicate end of a segment.
     pub fn set_segment_end(&mut self) -> &mut Self {
         self.v |= sys::AARTSAAPI_PACKET_SEGMENT_END as u64;
         self
     }
+    /// Set flag to indicate start of a stream.
     pub fn set_stream_start(&mut self) -> &mut Self {
         self.v |= sys::AARTSAAPI_PACKET_STREAM_START as u64;
         self
     }
+    /// Set flag to indicate end of a stream.
     pub fn set_stream_end(&mut self) -> &mut Self {
         self.v |= sys::AARTSAAPI_PACKET_STREAM_END as u64;
         self
@@ -872,6 +963,7 @@ impl Default for PacketFlags {
 
 pub type Result = std::result::Result<(), Error>;
 
+/// RTSA library error
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
     #[error("Empty")]
