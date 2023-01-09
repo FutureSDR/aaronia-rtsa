@@ -1,11 +1,14 @@
 [package]
 name = "aaronia-rtsa-sys"
-version = "0.0.3"
-edition = "2021"
+version = "0.0.4"
 build = "build.rs"
-links = "AaroniaRTSAAPI"
+description = "FFI bindings for Aaronia Spectran devices"
+documentation = "https://www.fleark.de/doc/aaronia_rtsa_sys/"
+edition = "2021"
+homepage = "https://www.futuresdr.org"
 license = "Apache-2.0"
-description = "FFI bindings for Aaronia RTSA"
+links = "AaroniaRTSAAPI"
+repository = "https://github.com/FutureSDR/aaronia-rtsa"
 
 [build-dependencies]
 bindgen = "0.63"
