@@ -662,6 +662,16 @@ impl Device {
     }
 }
 
+impl std::fmt::Debug for Device {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Device")
+            .field("api", &self.api)
+            .field("status", &self.status)
+            .field("serial", &self.serial)
+            .finish()
+    }
+}
+
 /// [`Device`] configuration parameter.
 #[derive(Debug)]
 pub enum ConfigItem {
