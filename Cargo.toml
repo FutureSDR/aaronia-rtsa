@@ -1,6 +1,6 @@
 [package]
 name = "aaronia-rtsa"
-version = "0.0.5"
+version = "0.0.6"
 description = "High-level bindings for Aaronia Spectran devices"
 documentation = "https://www.fleark.de/doc/aaronia_rtsa/"
 edition = "2021"
